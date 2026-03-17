@@ -562,6 +562,7 @@ tbody tr:hover {
 }
 
 .flex-gap-1 {
+  display: flex;
   gap: 1rem;
 }
 

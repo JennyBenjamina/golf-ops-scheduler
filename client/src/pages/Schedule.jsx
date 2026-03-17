@@ -1,21 +1,34 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns'
 import { Zap } from 'lucide-react'
 import * as api from '../api'
 import Modal from '../components/Modal'
-import Badge from '../components/Badge'
 
 export default function Schedule() {
-  const [viewType, setViewType] = useState('week')
-  const [startDate, setStartDate] = useState(startOfWeek(new Date()))
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768)
+  const [viewType, setViewType] = useState(() => window.innerWidth <= 768 ? 'day' : 'week')
+  const [startDate, setStartDate] = useState(() =>
+    window.innerWidth <= 768
+      ? new Date()
+      : startOfWeek(new Date(), { weekStartsOn: 1 })
+  )
   const [editingCell, setEditingCell] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [selectedStaff, setSelectedStaff] = useState('')
 
   const queryClient = useQueryClient()
 
-  const endDate = viewType === 'week' ? addDays(startDate, 6) : endOfMonth(startDate)
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const endDate =
+    viewType === 'week' ? addDays(startDate, 6)
+    : viewType === 'month' ? endOfMonth(startDate)
+    : startDate
 
   const { data: schedule = [] } = useQuery({
     queryKey: ['schedule', format(startDate, 'yyyy-MM-dd'), format(endDate, 'yyyy-MM-dd')],
@@ -111,6 +124,64 @@ export default function Schedule() {
     return events.filter((e) => format(new Date(e.date + 'T12:00:00'), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
   }
 
+  const renderDayView = () => {
+    const w = getWeatherForDate(startDate)
+    const dayEvents = getEventsForDate(startDate)
+
+    return (
+      <div style={{ marginTop: '1rem' }}>
+        {w && (
+          <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '6px', padding: '0.75rem', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+            ⚠️ Weather: {w.condition}
+          </div>
+        )}
+        {dayEvents.length > 0 && (
+          <div style={{ background: '#ecfdf5', border: '1px solid #10b981', borderRadius: '6px', padding: '0.75rem', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+            {dayEvents.map((e) => (
+              <div key={e.id}>📌 {e.name}</div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {shifts.map((shift) => {
+            const assignment = getAssignmentForCell(startDate, shift.id)
+            return (
+              <div
+                key={shift.id}
+                onClick={() => handleCellClick(startDate, shift)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '1rem',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  background: '#fff',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>{shift.name}</div>
+                  {shift.start_time && (
+                    <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.2rem' }}>
+                      {shift.start_time}–{shift.end_time}
+                    </div>
+                  )}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {assignment
+                    ? <strong style={{ fontSize: '0.95rem' }}>{assignment.staff_name}</strong>
+                    : <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Unassigned</span>
+                  }
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   const renderWeekView = () => {
     const days = []
     for (let i = 0; i < 7; i++) {
@@ -153,7 +224,6 @@ export default function Schedule() {
                         {assignment && (
                           <div>
                             <div><strong>{assignment.staff_name}</strong></div>
-                            <Badge type="role" value={assignment.staff_role} />
                           </div>
                         )}
                         {!assignment && <div style={{ color: '#9ca3af' }}>Unassigned</div>}
@@ -178,7 +248,7 @@ export default function Schedule() {
     const weeks = []
     let currentWeek = []
 
-    const firstDayOfWeek = monthStart.getDay()
+    const firstDayOfWeek = (monthStart.getDay() + 6) % 7
     for (let i = 0; i < firstDayOfWeek; i++) {
       currentWeek.push(null)
     }
@@ -198,7 +268,7 @@ export default function Schedule() {
       weeks.push(currentWeek)
     }
 
-    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     const defaultShift = shifts[0]
 
     return (
@@ -248,51 +318,75 @@ export default function Schedule() {
     <div>
       <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
         <h1>Schedule</h1>
-        <div className="flex-gap-1">
-          <button className="btn btn-secondary btn-sm" onClick={() => setViewType('week')}>
-            Week
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setViewType('month')}>
-            Month
-          </button>
-        </div>
+        {!isMobile && (
+          <div className="flex-gap-1">
+            <button className="btn btn-secondary btn-sm" onClick={() => setViewType('week')}>
+              Week
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setViewType('month')}>
+              Month
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card">
         <div className="flex-between" style={{ marginBottom: '1.5rem' }}>
-          <div className="flex-gap-1">
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setStartDate(addDays(startDate, viewType === 'week' ? -7 : -30))}
-            >
-              ← Previous
-            </button>
-            <span style={{ padding: '0.5rem 1rem', alignSelf: 'center' }}>
-              {format(startDate, 'MMM yyyy')}
-            </span>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setStartDate(addDays(startDate, viewType === 'week' ? 7 : 30))}
-            >
-              Next →
-            </button>
-          </div>
-          <div className="flex-gap-1">
-            <button className="btn btn-secondary btn-sm" onClick={handleClearWeek}>
-              Clear Period
-            </button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => generateMutation.mutate()}
-              disabled={generateMutation.isPending}
-            >
-              <Zap size={16} />
-              {generateMutation.isPending ? 'Generating...' : 'Generate Schedule'}
-            </button>
-          </div>
+          {isMobile ? (
+            <div className="flex-gap-1" style={{ width: '100%', justifyContent: 'space-between' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setStartDate(addDays(startDate, -1))}
+              >
+                ← Prev
+              </button>
+              <span style={{ alignSelf: 'center', fontWeight: '600' }}>
+                {isSameDay(startDate, new Date()) ? 'Today' : format(startDate, 'EEE, MMM dd')}
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setStartDate(addDays(startDate, 1))}
+              >
+                Next →
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex-gap-1">
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setStartDate(addDays(startDate, viewType === 'week' ? -7 : -30))}
+                >
+                  ← Previous
+                </button>
+                <span style={{ padding: '0.5rem 1rem', alignSelf: 'center' }}>
+                  {format(startDate, 'MMM yyyy')}
+                </span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setStartDate(addDays(startDate, viewType === 'week' ? 7 : 30))}
+                >
+                  Next →
+                </button>
+              </div>
+              <div className="flex-gap-1">
+                <button className="btn btn-secondary btn-sm" onClick={handleClearWeek}>
+                  Clear Period
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => generateMutation.mutate()}
+                  disabled={generateMutation.isPending}
+                >
+                  <Zap size={16} />
+                  {generateMutation.isPending ? 'Generating...' : 'Generate Schedule'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
-        {viewType === 'week' ? renderWeekView() : renderMonthView()}
+        {isMobile ? renderDayView() : (viewType === 'week' ? renderWeekView() : renderMonthView())}
       </div>
 
       <Modal
