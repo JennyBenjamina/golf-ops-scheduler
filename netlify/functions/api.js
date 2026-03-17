@@ -15,7 +15,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/', router);
+app.use('/api', router);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 

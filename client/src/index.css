@@ -12,8 +12,8 @@
   --error: #ef4444;
   --success: #10b981;
   --warning: #f59e0b;
-  --sidebar-bg: #0f172a;
-  --nav-inactive: #94a3b8;
+  --sidebar-bg: #eef2ee;
+  --nav-inactive: #4b5e4d;
   --nav-active: #ffffff;
 }
 
@@ -53,31 +53,31 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 
 .sidebar-header {
   padding: 0 1.25rem 1.25rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid rgba(75, 94, 77, 0.15);
   margin-bottom: 0.75rem;
 }
 
 .sidebar-logo {
   font-size: 0.95rem;
   font-weight: 700;
-  color: var(--white);
+  color: var(--dark-text);
   letter-spacing: 0.02em;
   line-height: 1.4;
 }
 
 .sidebar-nav {
   list-style: none;
-  padding: 0 0.625rem;
+  padding: 0;
 }
 
 .nav-item {
-  margin: 1px 0;
+  margin: 0;
 }
 
 /* Reset browser button defaults specifically for nav */
@@ -88,14 +88,14 @@ body {
   align-items: center;
   gap: 0.75rem;
   width: 100%;
-  padding: 0.6rem 0.875rem;
+  padding: 0.7rem 1.25rem;
   color: var(--nav-inactive);
   text-decoration: none;
   transition: background-color 0.15s ease, color 0.15s ease;
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: 0;
   background-color: transparent;
   border: none;
   outline: none;
@@ -104,8 +104,8 @@ body {
 }
 
 .nav-link:hover {
-  background-color: rgba(148, 163, 184, 0.1);
-  color: var(--white);
+  background-color: rgba(59, 130, 246, 0.08);
+  color: var(--primary);
 }
 
 .nav-link.active {
@@ -634,7 +634,7 @@ tbody tr:hover {
     border-bottom: none;
     margin-bottom: 0;
     white-space: nowrap;
-    border-right: 1px solid rgba(148, 163, 184, 0.15);
+    border-right: 1px solid rgba(75, 94, 77, 0.15);
     padding-right: 1rem;
   }
 
