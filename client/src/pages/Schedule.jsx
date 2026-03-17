@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format, addDays, startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from 'date-fns'
+import { format, addDays, startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns'
 import { Zap } from 'lucide-react'
 import * as api from '../api'
 import Modal from '../components/Modal'
 import Badge from '../components/Badge'
-import { SHIFTS } from '../constants'
 
 export default function Schedule() {
   const [viewType, setViewType] = useState('week')
@@ -26,6 +25,11 @@ export default function Schedule() {
   const { data: staff = [] } = useQuery({
     queryKey: ['staff'],
     queryFn: api.fetchStaff,
+  })
+
+  const { data: shifts = [] } = useQuery({
+    queryKey: ['shifts'],
+    queryFn: api.fetchShifts,
   })
 
   const { data: weather = [] } = useQuery({
@@ -63,30 +67,27 @@ export default function Schedule() {
     },
   })
 
+  const getAssignmentForCell = (date, shiftId) => {
+    return schedule.find(
+      (a) =>
+        format(new Date(a.date + 'T12:00:00'), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
+        (a.shift_template_id === shiftId || a.shift_id === shiftId)
+    )
+  }
+
   const handleCellClick = (date, shift) => {
     setEditingCell({ date, shift })
-    const existing = schedule.find(
-      (a) =>
-        format(new Date(a.date), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
-        a.shiftTemplate === shift
-    )
-    if (existing) {
-      setSelectedStaff(existing.staffId)
-    } else {
-      setSelectedStaff('')
-    }
+    const existing = getAssignmentForCell(date, shift.id)
+    setSelectedStaff(existing ? String(existing.staff_id) : '')
     setShowModal(true)
   }
 
   const handleAssignStaff = () => {
     if (!selectedStaff || !editingCell) return
-
-    const selectedStaffMember = staff.find((s) => s.id === selectedStaff)
     createAssignmentMutation.mutate({
       date: format(editingCell.date, 'yyyy-MM-dd'),
-      staffId: selectedStaff,
-      shiftTemplate: editingCell.shift,
-      hours: 8,
+      staff_id: parseInt(selectedStaff),
+      shift_template_id: editingCell.shift.id,
     })
   }
 
@@ -96,26 +97,18 @@ export default function Schedule() {
 
   const handleClearWeek = () => {
     if (confirm('Remove all assignments for this period?')) {
-      schedule.forEach((assignment) => {
-        deleteAssignmentMutation.mutate(assignment.id)
+      api.clearSchedule(format(startDate, 'yyyy-MM-dd'), format(endDate, 'yyyy-MM-dd')).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['schedule'] })
       })
     }
   }
 
-  const getAssignmentForCell = (date, shift) => {
-    return schedule.find(
-      (a) =>
-        format(new Date(a.date), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd') &&
-        a.shiftTemplate === shift
-    )
-  }
-
   const getWeatherForDate = (date) => {
-    return weather.find((w) => format(new Date(w.date), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
+    return weather.find((w) => format(new Date(w.date + 'T12:00:00'), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
   }
 
   const getEventsForDate = (date) => {
-    return events.filter((e) => format(new Date(e.date), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
+    return events.filter((e) => format(new Date(e.date + 'T12:00:00'), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'))
   }
 
   const renderWeekView = () => {
@@ -138,15 +131,20 @@ export default function Schedule() {
           </tr>
         </thead>
         <tbody>
-          {SHIFTS.map((shift) => (
-            <tr key={shift}>
-              <td><strong>{shift}</strong></td>
+          {shifts.map((shift) => (
+            <tr key={shift.id}>
+              <td>
+                <strong>{shift.name}</strong>
+                {shift.start_time && (
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{shift.start_time}–{shift.end_time}</div>
+                )}
+              </td>
               {days.map((day) => {
-                const assignment = getAssignmentForCell(day, shift)
+                const assignment = getAssignmentForCell(day, shift.id)
                 const w = getWeatherForDate(day)
                 return (
                   <td
-                    key={`${format(day, 'yyyy-MM-dd')}-${shift}`}
+                    key={`${format(day, 'yyyy-MM-dd')}-${shift.id}`}
                     onClick={() => handleCellClick(day, shift)}
                     style={{ cursor: 'pointer' }}
                   >
@@ -154,8 +152,8 @@ export default function Schedule() {
                       <div className="schedule-cell-content">
                         {assignment && (
                           <div>
-                            <div><strong>{assignment.staffName}</strong></div>
-                            <Badge type="role" value={assignment.staffRole} />
+                            <div><strong>{assignment.staff_name}</strong></div>
+                            <Badge type="role" value={assignment.staff_role} />
                           </div>
                         )}
                         {!assignment && <div style={{ color: '#9ca3af' }}>Unassigned</div>}
@@ -201,6 +199,7 @@ export default function Schedule() {
     }
 
     const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const defaultShift = shifts[0]
 
     return (
       <div>
@@ -215,7 +214,7 @@ export default function Schedule() {
               return <div key={`empty-${idx}`} className="calendar-day other-month"></div>
             }
 
-            const dayAssignments = SHIFTS.map((shift) => getAssignmentForCell(day, shift)).filter(Boolean)
+            const dayAssignments = shifts.map((s) => getAssignmentForCell(day, s.id)).filter(Boolean)
             const w = getWeatherForDate(day)
             const dayEvents = getEventsForDate(day)
 
@@ -223,7 +222,7 @@ export default function Schedule() {
               <div
                 key={format(day, 'yyyy-MM-dd')}
                 className={`calendar-day ${isSameDay(day, new Date()) ? 'today' : ''}`}
-                onClick={() => handleCellClick(day, 'Morning')}
+                onClick={() => defaultShift && handleCellClick(day, defaultShift)}
               >
                 <div className="calendar-day-number">{format(day, 'd')}</div>
                 <div className="calendar-day-content">
@@ -298,7 +297,7 @@ export default function Schedule() {
 
       <Modal
         isOpen={showModal}
-        title={`${editingCell ? format(editingCell.date, 'MMM dd, yyyy') + ' - ' + editingCell.shift : ''} Assignment`}
+        title={`${editingCell ? format(editingCell.date, 'MMM dd, yyyy') + ' — ' + editingCell.shift.name : ''}`}
         onClose={() => {
           setShowModal(false)
           setEditingCell(null)
@@ -310,10 +309,11 @@ export default function Schedule() {
               <button
                 className="btn btn-danger"
                 onClick={() => {
-                  const assignment = getAssignmentForCell(editingCell.date, editingCell.shift)
-                  if (assignment) {
-                    handleRemoveAssignment(assignment.id)
-                  }
+                  const assignment = getAssignmentForCell(editingCell.date, editingCell.shift.id)
+                  if (assignment) handleRemoveAssignment(assignment.id)
+                  setShowModal(false)
+                  setEditingCell(null)
+                  setSelectedStaff('')
                 }}
               >
                 Remove Assignment
@@ -330,7 +330,7 @@ export default function Schedule() {
           <select value={selectedStaff} onChange={(e) => setSelectedStaff(e.target.value)}>
             <option value="">-- Unassigned --</option>
             {staff.map((s) => (
-              <option key={s.id} value={s.id}>
+              <option key={s.id} value={String(s.id)}>
                 {s.name} ({s.role})
               </option>
             ))}

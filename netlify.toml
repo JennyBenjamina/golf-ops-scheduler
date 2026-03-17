@@ -1,10 +1,17 @@
 [build]
-  publish = "public"
+  command = "npm install && cd client && npm install && npm run build"
+  publish = "client/dist"
   functions = "netlify/functions"
-  command = "npm install"
 
+# API requests → serverless function
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
   force = true
+
+# SPA fallback — must come last
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
